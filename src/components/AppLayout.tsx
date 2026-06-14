@@ -112,7 +112,7 @@ const MobileBottomNav = ({ items }: { items: NavItem[] }) => (
           {({ isActive }) => (
             <>
               {it.icon}
-              {isActive && <span className="hidden xs:inline">{it.label}</span>}
+              {isActive && <span>{it.label}</span>}
             </>
           )}
         </NavLink>
