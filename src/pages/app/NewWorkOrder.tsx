@@ -6,18 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { generateWoCode, PRIORITY_LABEL, STATUS } from "@/lib/workOrders";
-import { Mic, MicOff, Upload, Loader2, Wand2 } from "lucide-react";
+import { Mic, MicOff, Upload, Loader2, Wand2, X, Image as ImageIcon, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Machine = { id: string; name: string; model: string | null; city: string | null; district: string | null };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-// Browser SpeechRecognition typing
 type SpeechRecognitionType = any;
 
 const NewWorkOrder = () => {
@@ -33,12 +32,11 @@ const NewWorkOrder = () => {
     badge: "orta",
   });
   const [photos, setPhotos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Voice
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [transcribing, setTranscribing] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionType>(null);
   const speechAvailable =
@@ -46,15 +44,20 @@ const NewWorkOrder = () => {
     ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       const { data } = await supabase
         .from("machines")
         .select("id, name, model, city, district")
         .order("name");
       setMachines((data ?? []) as Machine[]);
-    };
-    load();
+    })();
   }, []);
+
+  useEffect(() => {
+    const urls = photos.map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [photos]);
 
   const update = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -83,13 +86,11 @@ const NewWorkOrder = () => {
     setPhotos((p) => [...p, ...next]);
   };
 
+  const removePhoto = (i: number) => setPhotos((p) => p.filter((_, idx) => idx !== i));
+
   const startRecording = () => {
     if (!speechAvailable) {
-      toast({
-        title: "Sesli giriş desteklenmiyor",
-        description: "Tarayıcınız sesli kayıt desteklemiyor. Lütfen metin olarak yazın.",
-        variant: "destructive",
-      });
+      toast({ title: "Sesli giriş desteklenmiyor", description: "Tarayıcınız sesli kayıt desteklemiyor.", variant: "destructive" });
       return;
     }
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -108,7 +109,6 @@ const NewWorkOrder = () => {
       setTranscript((finalText + interim).trim());
     };
     rec.onerror = (e: any) => {
-      console.error("speech error", e);
       toast({ title: "Kayıt hatası", description: e.error || "Bilinmeyen hata", variant: "destructive" });
       setRecording(false);
     };
@@ -116,13 +116,11 @@ const NewWorkOrder = () => {
     rec.start();
     recognitionRef.current = rec;
     setRecording(true);
-    setTranscribing(true);
   };
 
   const stopRecording = () => {
     recognitionRef.current?.stop();
     setRecording(false);
-    setTranscribing(false);
   };
 
   const callVoiceFunction = async () => {
@@ -144,9 +142,10 @@ const NewWorkOrder = () => {
       setForm((f) => ({
         ...f,
         complaint: v.ariza ? String(v.ariza) : f.complaint,
-        description: [v.neden && `Olası neden: ${v.neden}`, v.yapilan && `Önerilen / yapılan: ${v.yapilan}`]
-          .filter(Boolean)
-          .join("\n") || f.description,
+        description:
+          [v.neden && `Olası neden: ${v.neden}`, v.yapilan && `Önerilen / yapılan: ${v.yapilan}`]
+            .filter(Boolean)
+            .join("\n") || f.description,
       }));
       toast({ title: "Form dolduruldu", description: "Lütfen kontrol edip kaydedin." });
     } catch (e: any) {
@@ -169,40 +168,33 @@ const NewWorkOrder = () => {
     setSubmitting(true);
     try {
       const code = generateWoCode();
-      const insertPayload: any = {
-        code,
-        complaint: form.complaint.trim(),
-        description: form.description.trim() || null,
-        status: STATUS.open,
-        badge: form.badge,
-        region: profile.region,
-        city: form.city.trim() || null,
-        district: form.district.trim() || null,
-        client: profile.client ?? null,
-        machine_id: form.machine_id || null,
-        assigned_technician_id: user.id,
-      };
       const { data: wo, error } = await supabase
         .from("work_orders")
-        .insert(insertPayload)
+        .insert({
+          code,
+          complaint: form.complaint.trim(),
+          description: form.description.trim() || null,
+          status: STATUS.open,
+          badge: form.badge,
+          region: profile.region,
+          city: form.city.trim() || null,
+          district: form.district.trim() || null,
+          client: profile.client ?? null,
+          machine_id: form.machine_id || null,
+          assigned_technician_id: user.id,
+        })
         .select("id")
         .single();
       if (error) throw error;
 
-      // Upload photos
       const uploadedPaths: string[] = [];
       for (const file of photos) {
         const path = `${wo.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-        const { error: upErr } = await supabase.storage.from("evidence-photos").upload(path, file, {
-          contentType: file.type,
-          upsert: false,
-        });
-        if (upErr) {
-          console.error("upload err", upErr);
-          toast({ title: "Fotoğraf yüklenemedi", description: upErr.message, variant: "destructive" });
-        } else {
-          uploadedPaths.push(path);
-        }
+        const { error: upErr } = await supabase.storage
+          .from("evidence-photos")
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (upErr) toast({ title: "Fotoğraf yüklenemedi", description: upErr.message, variant: "destructive" });
+        else uploadedPaths.push(path);
       }
       if (uploadedPaths.length > 0) {
         await supabase.from("work_orders").update({ evidence_photo_urls: uploadedPaths }).eq("id", wo.id);
@@ -211,7 +203,6 @@ const NewWorkOrder = () => {
       toast({ title: "İş emri oluşturuldu", description: code });
       navigate(`/app/work-orders/${wo.id}`, { replace: true });
     } catch (e: any) {
-      console.error(e);
       toast({ title: "Kayıt başarısız", description: e.message ?? "Bilinmeyen hata", variant: "destructive" });
     } finally {
       setSubmitting(false);
@@ -219,122 +210,162 @@ const NewWorkOrder = () => {
   };
 
   return (
-    <div className="max-w-3xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Yeni Arıza Kaydı</h1>
-        <p className="text-sm text-muted-foreground">Sahadan gelen arızayı yapılandırılmış olarak kaydedin.</p>
-      </div>
+    <div className="space-y-6 max-w-3xl">
+      {/* Voice capture — premium dark card */}
+      <section className="surface-ink p-6 sm:p-7">
+        <div className="flex items-center gap-2 label-eyebrow text-ink-muted">
+          <Sparkles className="w-3.5 h-3.5 text-primary" /> Sesli Giriş
+        </div>
+        <h2 className="font-display text-2xl font-bold mt-3 text-ink-foreground">
+          Konuşun, ToolA <span className="text-primary">formu doldursun</span>
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Tek dokunuşla arızayı anlatın. Sahadan gelen ses kaydı yapılandırılmış bir iş emrine dönüşür.
+        </p>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Mic className="w-4 h-4" /> Sesli giriş (opsiyonel)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!speechAvailable && (
-            <p className="text-xs text-amber-600">
-              Tarayıcınız sesli kayıt desteklemiyor. Aşağıdaki kutuya konuştuğunuzu yazıp "Form'a Aktar" düğmesini kullanabilirsiniz.
-            </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {!recording ? (
+            <button
+              type="button"
+              onClick={startRecording}
+              disabled={!speechAvailable}
+              className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 h-12 font-semibold disabled:opacity-50 hover:opacity-95 transition"
+            >
+              <Mic className="w-4 h-4" /> Kaydı başlat
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="inline-flex items-center gap-2 rounded-full bg-destructive text-destructive-foreground px-5 h-12 font-semibold hover:opacity-95 transition"
+            >
+              <MicOff className="w-4 h-4" /> Durdur
+              <span className="relative ml-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive-foreground opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-destructive-foreground" /></span>
+            </button>
           )}
-          <div className="flex gap-2">
-            {!recording ? (
-              <Button type="button" variant="outline" onClick={startRecording} disabled={!speechAvailable}>
-                <Mic className="w-4 h-4 mr-2" />Kaydı başlat
-              </Button>
-            ) : (
-              <Button type="button" variant="destructive" onClick={stopRecording}>
-                <MicOff className="w-4 h-4 mr-2" />Durdur
-              </Button>
-            )}
-            <Button type="button" onClick={callVoiceFunction} disabled={aiBusy || !transcript.trim()}>
-              {aiBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
-              Form'a Aktar
-            </Button>
-          </div>
-          <Textarea
-            placeholder="Konuştuklarınız buraya yazılacak. İsterseniz elle de düzeltebilirsiniz."
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            rows={4}
-          />
-          {transcribing && <p className="text-xs text-muted-foreground">Dinleniyor...</p>}
-        </CardContent>
-      </Card>
+          <button
+            type="button"
+            onClick={callVoiceFunction}
+            disabled={aiBusy || !transcript.trim()}
+            className="inline-flex items-center gap-2 rounded-full bg-ink-elevated text-ink-foreground border border-ink-border px-5 h-12 font-semibold disabled:opacity-40 hover:bg-ink-elevated/80 transition"
+          >
+            {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            Form'a Aktar
+          </button>
+        </div>
 
+        <Textarea
+          placeholder={speechAvailable ? "Konuştuklarınız buraya yazılacak…" : "Tarayıcı sesli kaydı desteklemiyor. Buraya elle yazın."}
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+          rows={4}
+          className="mt-4 bg-ink-elevated text-ink-foreground placeholder:text-ink-muted border-ink-border rounded-2xl resize-none"
+        />
+      </section>
+
+      {/* Form card */}
       <form onSubmit={submit} className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">İş emri bilgileri</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Ekipman / Makine</Label>
-              <Select value={form.machine_id} onValueChange={onPickMachine}>
-                <SelectTrigger>
-                  <SelectValue placeholder={machines.length ? "Ekipman seçin (opsiyonel)" : "Bölgenizde kayıtlı ekipman yok"} />
-                </SelectTrigger>
+        <section className="surface-card p-6 sm:p-7 space-y-5">
+          <h2 className="font-display text-xl font-bold">İş emri bilgileri</h2>
+
+          <Field label="Ekipman / Makine">
+            <Select value={form.machine_id} onValueChange={onPickMachine}>
+              <SelectTrigger className="h-12 rounded-2xl bg-secondary border-0">
+                <SelectValue placeholder={machines.length ? "Ekipman seçin (opsiyonel)" : "Bölgenizde kayıtlı ekipman yok"} />
+              </SelectTrigger>
+              <SelectContent>
+                {machines.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}{m.model ? ` — ${m.model}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field label="Arıza açıklaması" required>
+            <Input
+              value={form.complaint}
+              onChange={(e) => update("complaint")(e.target.value)}
+              required
+              className="h-12 rounded-2xl bg-secondary border-0"
+              placeholder="Örn. Pompa P-204 yüksek ses ve titreşim"
+            />
+          </Field>
+
+          <Field label="Belirti / detay">
+            <Textarea
+              rows={3}
+              value={form.description}
+              onChange={(e) => update("description")(e.target.value)}
+              className="rounded-2xl bg-secondary border-0 resize-none"
+              placeholder="Gözlemler, kontrol edilenler, ölçümler…"
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Şehir">
+              <Input value={form.city} onChange={(e) => update("city")(e.target.value)} className="h-12 rounded-2xl bg-secondary border-0" />
+            </Field>
+            <Field label="İlçe">
+              <Input value={form.district} onChange={(e) => update("district")(e.target.value)} className="h-12 rounded-2xl bg-secondary border-0" />
+            </Field>
+            <Field label="Öncelik">
+              <Select value={form.badge} onValueChange={update("badge")}>
+                <SelectTrigger className="h-12 rounded-2xl bg-secondary border-0"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {machines.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}{m.model ? ` — ${m.model}` : ""}
-                    </SelectItem>
+                  {Object.entries(PRIORITY_LABEL).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="complaint">Arıza açıklaması *</Label>
-              <Input id="complaint" value={form.complaint} onChange={(e) => update("complaint")(e.target.value)} required />
-            </div>
+          {/* Photo dropzone */}
+          <Field label="Fotoğraf / kanıt">
+            <label
+              htmlFor="photos"
+              className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/50 hover:bg-secondary transition cursor-pointer p-8 text-center"
+            >
+              <div className="icon-tile w-12 h-12"><Upload className="w-5 h-5" /></div>
+              <div className="text-sm font-semibold">Tıklayın veya sürükleyip bırakın</div>
+              <div className="text-xs text-muted-foreground">JPG · PNG · WebP · max 10MB</div>
+              <Input
+                id="photos"
+                type="file"
+                multiple
+                accept={ACCEPTED_TYPES.join(",")}
+                onChange={(e) => onFiles(e.target.files)}
+                className="hidden"
+              />
+            </label>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Belirti / detay</Label>
-              <Textarea id="description" rows={3} value={form.description} onChange={(e) => update("description")(e.target.value)} />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="city">Şehir</Label>
-                <Input id="city" value={form.city} onChange={(e) => update("city")(e.target.value)} />
+            {previews.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-3">
+                {previews.map((src, i) => (
+                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border group">
+                    <img src={src} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(i)}
+                      className="absolute top-1 right-1 w-7 h-7 rounded-full bg-ink text-ink-foreground flex items-center justify-center opacity-90 hover:opacity-100"
+                      aria-label="Kaldır"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="district">İlçe</Label>
-                <Input id="district" value={form.district} onChange={(e) => update("district")(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Öncelik</Label>
-                <Select value={form.badge} onValueChange={update("badge")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PRIORITY_LABEL).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            )}
+          </Field>
+        </section>
 
-            <div className="space-y-2">
-              <Label htmlFor="photos" className="flex items-center gap-2">
-                <Upload className="w-4 h-4" />Fotoğraf / kanıt
-              </Label>
-              <Input id="photos" type="file" multiple accept={ACCEPTED_TYPES.join(",")} onChange={(e) => onFiles(e.target.files)} />
-              {photos.length > 0 && (
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  {photos.map((f, i) => (
-                    <li key={i}>{f.name} — {(f.size / 1024).toFixed(0)} KB</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="flex gap-2 justify-end">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>İptal</Button>
-          <Button type="submit" disabled={submitting}>
+        <div className="flex gap-2 justify-end sticky bottom-24 lg:bottom-4 z-10">
+          <Button type="button" variant="outline" onClick={() => navigate(-1)} className="rounded-full h-12 px-6">
+            İptal
+          </Button>
+          <Button type="submit" disabled={submitting} className="rounded-full h-12 px-6">
             {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Kaydet
           </Button>
         </div>
@@ -342,5 +373,14 @@ const NewWorkOrder = () => {
     </div>
   );
 };
+
+const Field = ({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) => (
+  <div className="space-y-2">
+    <Label className="text-sm font-semibold">
+      {label}{required && <span className="text-primary"> *</span>}
+    </Label>
+    {children}
+  </div>
+);
 
 export default NewWorkOrder;
