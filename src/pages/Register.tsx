@@ -5,11 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { REGION_OPTIONS } from "@/lib/workOrders";
 import { z } from "zod";
+import { Wrench } from "lucide-react";
 
 const schema = z.object({
   full_name: z.string().trim().min(2, "Ad soyad en az 2 karakter").max(120),
@@ -34,10 +34,7 @@ const Register = () => {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = schema.safeParse(form);
-    if (!parsed.success) {
-      toast({ title: "Hatalı bilgi", description: parsed.error.issues[0].message, variant: "destructive" });
-      return;
-    }
+    if (!parsed.success) { toast({ title: "Hatalı bilgi", description: parsed.error.issues[0].message, variant: "destructive" }); return; }
     setSubmitting(true);
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
@@ -47,12 +44,7 @@ const Register = () => {
         data: { full_name: parsed.data.full_name },
       },
     });
-    if (error) {
-      setSubmitting(false);
-      toast({ title: "Kayıt başarısız", description: error.message, variant: "destructive" });
-      return;
-    }
-    // Update profile with region/client (trigger only sets full_name).
+    if (error) { setSubmitting(false); toast({ title: "Kayıt başarısız", description: error.message, variant: "destructive" }); return; }
     if (data.user) {
       const { error: upErr } = await supabase
         .from("profiles")
@@ -67,65 +59,65 @@ const Register = () => {
     setSubmitting(false);
     toast({
       title: "Kayıt oluşturuldu",
-      description: data.session
-        ? "Yönlendiriliyorsunuz..."
-        : "E-postanızı doğruladıktan sonra giriş yapabilirsiniz.",
+      description: data.session ? "Yönlendiriliyorsunuz…" : "E-postanızı doğruladıktan sonra giriş yapabilirsiniz.",
     });
     if (data.session) navigate("/app/work-orders", { replace: true });
     else navigate("/login", { replace: true });
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-muted/30 py-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl">Hesap oluştur</CardTitle>
-          <CardDescription>Sahanın hafızası — sahaya katılın.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="full_name">Ad Soyad</Label>
-              <Input id="full_name" value={form.full_name} onChange={(e) => update("full_name")(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">E-posta</Label>
-              <Input id="email" type="email" value={form.email} onChange={(e) => update("email")(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Şifre</Label>
-              <Input id="password" type="password" value={form.password} onChange={(e) => update("password")(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Bölge</Label>
-              <Select value={form.region} onValueChange={update("region")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {REGION_OPTIONS.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">İş emirleri ve ekipmanlar bölgenize göre filtrelenir.</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="client">Müşteri / Kurum (opsiyonel)</Label>
-              <Input id="client" value={form.client} onChange={(e) => update("client")(e.target.value)} />
-            </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Kayıt oluşturuluyor..." : "Kayıt ol"}
-            </Button>
-          </form>
-          <div className="mt-4 text-sm text-center text-muted-foreground">
-            Zaten hesabınız var mı?{" "}
-            <Link to="/login" className="text-primary hover:underline">Giriş yapın</Link>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex items-center justify-center px-5 py-12 bg-background">
+      <div className="w-full max-w-md">
+        <div className="flex items-center gap-2 mb-8">
+          <span className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-ink text-primary shadow-ink">
+            <Wrench className="w-4 h-4" />
+          </span>
+          <span className="font-display font-bold text-xl">Tool<span className="text-primary">A</span></span>
+        </div>
+        <h1 className="font-display text-3xl font-extrabold tracking-tight">Hesap oluştur</h1>
+        <p className="text-muted-foreground mt-1">Sahanın hafızası — sahaya katılın.</p>
+
+        <form onSubmit={onSubmit} className="mt-8 space-y-4">
+          <Field label="Ad Soyad" id="full_name">
+            <Input id="full_name" value={form.full_name} onChange={(e) => update("full_name")(e.target.value)} required className="h-12 rounded-2xl bg-secondary border-0" />
+          </Field>
+          <Field label="E-posta" id="email">
+            <Input id="email" type="email" value={form.email} onChange={(e) => update("email")(e.target.value)} required className="h-12 rounded-2xl bg-secondary border-0" />
+          </Field>
+          <Field label="Şifre" id="password">
+            <Input id="password" type="password" value={form.password} onChange={(e) => update("password")(e.target.value)} required className="h-12 rounded-2xl bg-secondary border-0" />
+          </Field>
+          <Field label="Bölge">
+            <Select value={form.region} onValueChange={update("region")}>
+              <SelectTrigger className="h-12 rounded-2xl bg-secondary border-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {REGION_OPTIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">İş emirleri ve ekipmanlar bölgenize göre filtrelenir.</p>
+          </Field>
+          <Field label="Müşteri / Kurum (opsiyonel)" id="client">
+            <Input id="client" value={form.client} onChange={(e) => update("client")(e.target.value)} className="h-12 rounded-2xl bg-secondary border-0" />
+          </Field>
+          <Button type="submit" className="w-full h-12 rounded-full text-base font-semibold" disabled={submitting}>
+            {submitting ? "Kayıt oluşturuluyor…" : "Kayıt ol"}
+          </Button>
+        </form>
+
+        <div className="mt-6 text-sm text-center text-muted-foreground">
+          Zaten hesabınız var mı?{" "}
+          <Link to="/login" className="text-primary font-semibold hover:underline">Giriş yapın</Link>
+        </div>
+      </div>
     </div>
   );
 };
+
+const Field = ({ label, id, children }: { label: string; id?: string; children: React.ReactNode }) => (
+  <div className="space-y-2">
+    <Label htmlFor={id} className="text-sm font-semibold">{label}</Label>
+    {children}
+  </div>
+);
 
 export default Register;
