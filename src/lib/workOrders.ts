@@ -1,5 +1,5 @@
 // Shared constants & helpers for ToolA work orders.
-// We use Turkish status & priority codes; the existing schema stores them as text.
+// Turkish status & priority codes; schema stores them as text.
 
 export const STATUS = {
   open: "acik",
@@ -11,16 +11,17 @@ export type StatusCode = typeof STATUS[keyof typeof STATUS];
 
 export const STATUS_LABEL: Record<string, string> = {
   acik: "Açık",
-  devam: "Devam Ediyor",
+  devam: "Devam",
   beklemede: "Beklemede",
   kapali: "Kapalı",
 };
 
+/** Tailwind classes for status pills (semantic tokens). */
 export const STATUS_TONE: Record<string, string> = {
-  acik: "bg-blue-100 text-blue-800 border-blue-200",
-  devam: "bg-amber-100 text-amber-800 border-amber-200",
-  beklemede: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  kapali: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  acik: "bg-primary/10 text-primary border-primary/20",
+  devam: "bg-warning/15 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/25",
+  beklemede: "bg-secondary text-foreground/70 border-border",
+  kapali: "bg-success/12 text-[hsl(var(--success))] border-[hsl(var(--success))]/25",
 };
 
 export const PRIORITY = {
@@ -38,10 +39,24 @@ export const PRIORITY_LABEL: Record<string, string> = {
 };
 
 export const PRIORITY_TONE: Record<string, string> = {
-  dusuk: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  orta: "bg-sky-100 text-sky-800 border-sky-200",
-  yuksek: "bg-orange-100 text-orange-800 border-orange-200",
-  kritik: "bg-red-100 text-red-800 border-red-200",
+  dusuk: "bg-secondary text-foreground/70 border-border",
+  orta: "bg-secondary text-foreground/80 border-border",
+  yuksek: "bg-primary/12 text-primary border-primary/25",
+  kritik: "bg-destructive/12 text-destructive border-destructive/25",
+};
+
+/** Small colored dot inside a pill (status / priority dot). */
+export const STATUS_DOT: Record<string, string> = {
+  acik: "bg-primary",
+  devam: "bg-[hsl(var(--warning))]",
+  beklemede: "bg-muted-foreground",
+  kapali: "bg-[hsl(var(--success))]",
+};
+export const PRIORITY_DOT: Record<string, string> = {
+  dusuk: "bg-muted-foreground",
+  orta: "bg-foreground/60",
+  yuksek: "bg-primary",
+  kritik: "bg-destructive",
 };
 
 export const REGION_OPTIONS = ["Marmara", "İç Anadolu", "Ege", "Akdeniz", "Karadeniz", "Doğu Anadolu", "Güneydoğu Anadolu"];
@@ -73,4 +88,11 @@ export function isQualityClosure(wo: { status?: string | null; closing_notes?: a
   if (wo.status !== STATUS.closed) return false;
   const c = (wo.closing_notes ?? {}) as ClosingNotes;
   return Boolean(c.root_cause && c.action_taken && hasEvidence(wo));
+}
+
+/** Initials helper for avatars (e.g. "Mehmet K." -> "MK"). */
+export function initials(name?: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
 }
