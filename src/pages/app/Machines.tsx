@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
@@ -49,7 +50,7 @@ const Machines = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {filtered.map((m) => (
-            <article key={m.id} className="surface-card p-5 flex items-start gap-4">
+            <Link key={m.id} to={`/app/machines/${m.id}`} className="surface-card p-5 flex items-start gap-4 hover:shadow-float transition">
               <div className="icon-tile w-12 h-12 shrink-0"><Factory className="w-5 h-5" /></div>
               <div className="min-w-0 flex-1">
                 <div className="font-display font-bold text-lg truncate">{m.name}</div>
@@ -64,7 +65,7 @@ const Machines = () => {
                   )}
                 </div>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       )}
